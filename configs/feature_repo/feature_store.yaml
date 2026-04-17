@@ -1,0 +1,9 @@
+
+project: ecommerce_features
+registry: C:\Users\Anass\Desktop\projet3.0\configs\feature_repo\registry.db
+provider: local
+offline_store:
+    type: file
+online_store:
+    type: redis
+    connection_string: "localhost:6379"

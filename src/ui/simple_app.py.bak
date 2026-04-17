@@ -1,0 +1,912 @@
+"""
+Simple Streamlit App for Testing
+Basic interface without complex dependencies
+"""
+
+import streamlit as st
+import pandas as pd
+import numpy as np
+from datetime import datetime
+import plotly.express as px
+import plotly.graph_objects as go
+import os
+from PIL import Image
+
+# Page configuration
+st.set_page_config(
+    page_title="E-commerce Recommendations",
+    page_icon="🛍️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #1f77b4;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    .recommendation-card {
+        border: 1px solid #ddd;
+        border-radius: 10px;
+        padding: 1rem;
+        margin: 0.5rem 0;
+        background-color: #f9f9f9;
+    }
+    .score-badge {
+        background-color: #4CAF50;
+        color: white;
+        padding: 0.25rem 0.5rem;
+        border-radius: 15px;
+        font-size: 0.8rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Load real Amazon datasets
+def load_real_amazon_data():
+    """Load real Amazon product and review data"""
+    # Check if data is already in session state
+    if 'cached_items_df' in st.session_state and 'cached_interactions_df' in st.session_state:
+        return st.session_state.cached_items_df, st.session_state.cached_interactions_df
+    
+    # Try to load preprocessed data
+    items_path = "data/real_items.parquet"
+    interactions_path = "data/real_interactions.parquet"
+    
+    if not os.path.exists(items_path):
+        st.error("❌ Données prétraitées non trouvées!")
+        st.info("💡 Veuillez d'abord exécuter: `python load_real_amazon_data.py`")
+        return pd.DataFrame(), pd.DataFrame()
+    
+    try:
+        # Load preprocessed data directly
+        items_df = pd.read_parquet(items_path)
+        interactions_df = pd.read_parquet(interactions_path)
+        
+        # Cache in session state
+        st.session_state.cached_items_df = items_df
+        st.session_state.cached_interactions_df = interactions_df
+        
+        return items_df, interactions_df
+        
+    except Exception as e:
+        st.error(f"❌ Erreur de chargement: {e}")
+        return pd.DataFrame(), pd.DataFrame()
+
+# Session state initialization
+if 'user_id' not in st.session_state:
+    st.session_state.user_id = None
+if 'is_authenticated' not in st.session_state:
+    st.session_state.is_authenticated = False
+if 'items_data' not in st.session_state:
+    st.session_state.items_data = None
+if 'interactions_data' not in st.session_state:
+    st.session_state.interactions_data = None
+if 'interactions_df' not in st.session_state:
+    st.session_state.interactions_df = None
+if 'users_data' not in st.session_state:
+    st.session_state.users_data = None
+if 'wishlist' not in st.session_state:
+    st.session_state.wishlist = []
+if 'button_counter' not in st.session_state:
+    st.session_state.button_counter = 0
+if 'rec_button_counter' not in st.session_state:
+    st.session_state.rec_button_counter = 0
+if 'search_button_counter' not in st.session_state:
+    st.session_state.search_button_counter = 0
+
+def login_page():
+    """Display beautiful login/registration page"""
+    # Custom CSS for beautiful design
+    st.markdown("""
+    <style>
+    .login-container {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 2rem;
+        border-radius: 20px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        margin: 2rem 0;
+    }
+    .auth-card {
+        background: rgba(255, 255, 255, 0.95);
+        padding: 2rem;
+        border-radius: 15px;
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .auth-header {
+        text-align: center;
+        margin-bottom: 2rem;
+        font-size: 2.5rem;
+        font-weight: 700;
+        background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    .auth-subtitle {
+        text-align: center;
+        color: #666;
+        margin-bottom: 2rem;
+        font-size: 1.1rem;
+    }
+    .divider {
+        text-align: center;
+        margin: 1.5rem 0;
+        position: relative;
+    }
+    .divider::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: #ddd;
+    }
+    .divider span {
+        background: white;
+        padding: 0 1rem;
+        position: relative;
+        color: #999;
+        font-size: 0.9rem;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Main login container
+    with st.container():
+        st.markdown("""
+        <div class="login-container">
+            <div class="auth-header">🛍️ Smart Shopping</div>
+            <div class="auth-subtitle">Discover products tailored just for you</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("""
+            <div class="auth-card">
+                <h3 style="color: #333; margin-bottom: 1.5rem;">🔐 Welcome Back</h3>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            username = st.text_input("👤 Username", key="login_username", 
+                                help="Enter your username")
+            password = st.text_input("🔒 Password", type="password", key="login_password",
+                                help="Enter your password")
+            
+            if st.button("🚀 Login", key="login_button", use_container_width=True):
+                if username and password:
+                    st.session_state.user_id = username
+                    st.session_state.is_authenticated = True
+                    st.success(f"🎉 Welcome back, {username}!")
+                    st.rerun()
+                else:
+                    st.error("⚠️ Please enter username and password")
+        
+        with col2:
+            st.markdown("""
+            <div class="auth-card">
+                <h3 style="color: #333; margin-bottom: 1.5rem;">✨ Create Account</h3>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            with st.form("registration_form"):
+                new_username = st.text_input("👤 Choose Username", help="Pick a unique username")
+                email = st.text_input("📧 Email Address", help="We'll never share your email")
+                password = st.text_input("🔒 Password", type="password", help="Choose a strong password")
+                confirm_password = st.text_input("🔒 Confirm Password", type="password", 
+                                              help="Re-enter your password")
+                
+                st.markdown('<div class="divider"><span>OR</span></div>', unsafe_allow_html=True)
+                
+                # Simple preferences
+                st.markdown("**🎯 Quick Preferences**")
+                categories = st.multiselect(
+                    "🛍️ Favorite Categories",
+                    ["Electronics", "Clothing", "Books", "Home & Garden", "Sports", "Beauty"],
+                    help="Select categories you're interested in"
+                )
+                
+                register_button = st.form_submit_button("🎉 Create Account", use_container_width=True)
+                
+                if register_button:
+                    if new_username and email and password == confirm_password:
+                        # Save user preferences
+                        user_preferences = {
+                            'username': new_username,
+                            'email': email,
+                            'favorite_categories': categories if categories else [],  # Allow empty categories
+                            'registration_date': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
+                        }
+                        st.session_state.user_preferences = user_preferences
+                        
+                        st.session_state.user_id = new_username
+                        st.session_state.is_authenticated = True
+                        st.success(f"🎊 Account created! Welcome, {new_username}!")
+                        if categories:  # Only show preferences message if categories selected
+                            st.success(f"🎯 Your preferences have been saved for personalized recommendations!")
+                        st.rerun()
+                    else:
+                        st.error("⚠️ Please fill all required fields correctly")
+
+def main_dashboard():
+    """Main dashboard with recommendations, search, and activity"""
+    # Header
+    st.markdown('<h1 class="main-header">🛍️ Your Personalized Recommendations</h1>', 
+                unsafe_allow_html=True)
+    
+    # User info and logout
+    col1, col2, col3 = st.columns([2, 1, 1])
+    with col1:
+        st.markdown(f"**Welcome back, {st.session_state.user_id}!**")
+    with col2:
+        if st.button("🔄 Refresh Recommendations"):
+                # Clear cached recommendations to force regeneration
+                if 'cached_recommendations' in st.session_state:
+                    del st.session_state.cached_recommendations
+                if 'rec_params' in st.session_state:
+                    del st.session_state.rec_params
+                st.success("Recommendations will be refreshed!")
+                st.rerun()
+    
+    # Fixed settings for cleaner interface
+    model_type = "hybrid"
+    num_recs = 10
+    include_explanations = st.checkbox(
+            "Show Explanations",
+            value=True,
+            help="Display why each item was recommended"
+        )
+    
+    # Main content area
+    tab1, tab2, tab3, tab4 = st.tabs(["🏠 Recommendations", "🔍 Search Items", "📊 Your Activity", "❤️ Wishlist"])
+    
+    with tab1:
+        # Check if user has preferences
+        user_prefs = st.session_state.get('user_preferences', {})
+        favorite_categories = user_prefs.get('favorite_categories', [])
+        
+        # Use a single flag to determine recommendation type
+        has_preferences = len(favorite_categories) > 0
+        
+        if has_preferences:
+            # Clean category names to handle spaces and underscores
+            favorite_categories_clean = [cat.replace(' ', ' & ').replace('_', ' ') for cat in favorite_categories]
+            available_categories = items_df['category'].unique().tolist()
+            
+            # Check if favorite categories exist in dataset
+            matching_categories = [cat for cat in favorite_categories_clean if cat in available_categories]
+            non_matching_categories = [cat for cat in favorite_categories_clean if cat not in available_categories]
+            
+            if matching_categories:
+                # Categories exist, proceed with filtering
+                filtered_products = items_df[items_df['category'].isin(favorite_categories_clean)]
+            else:
+                # No matching categories, show helpful message
+                st.warning(f"⚠️ Some selected categories are not available: {', '.join(non_matching_categories)}")
+                st.info("💡 Available categories: Electronics, Video_Games, Digital_Music, Software, Appliances, Gift_Cards, Industrial_and_Scientific, Magazine_Subscriptions, Prime_Pantry")
+                # Use general recommendations
+                has_preferences = False
+        
+        items_df = st.session_state.items_data
+        interactions_df = st.session_state.interactions_df
+        
+        if items_df.empty:
+            st.error("No product data available. Please check your data files.")
+            st.info("Expected files in data/ directory: items.parquet, interactions.parquet")
+            return
+        
+        # Check if recommendations are already cached
+        if 'cached_recommendations' not in st.session_state or 'rec_params' not in st.session_state:
+            # Generate recommendations from real data
+            recommendations = []
+            
+            # Get sample products from real data
+            if not items_df.empty:
+                # Prioritize products with images
+                has_images = items_df['valid_image_urls'].apply(
+                    lambda x: len(x) > 0 if hasattr(x, '__len__') else False
+                )
+                
+                # Split products with and without images
+                products_with_images = items_df[has_images]
+                        # Prioritize products with images from filtered products
+                        has_images = filtered_products['valid_image_urls'].apply(
+                            lambda x: len(x) > 0 if hasattr(x, '__len__') else False
+                        )
+                        
+                        products_with_images = filtered_products[has_images]
+                        products_without_images = filtered_products[~has_images]
+                        
+                        st.write(f"🔍 Debug: Products with images: {len(products_with_images)}")
+                        st.write(f"🔍 Debug: Products without images: {len(products_without_images)}")
+                        
+                        # Try to get as many products with images as possible
+                        if len(products_with_images) >= num_recs:
+                            # We have enough products with images, use only them
+                            sample_products = products_with_images.sample(num_recs, random_state=42)
+                        else:
+                            # Not enough products with images, mix with some without images
+                            num_with_images = len(products_with_images)
+                            num_without_images = max(0, num_recs - num_with_images)
+                            
+                            sample_products = pd.concat([
+                                products_with_images.sample(num_with_images, random_state=42) if num_with_images > 0 else pd.DataFrame(),
+                                products_without_images.sample(num_without_images, random_state=42) if num_without_images > 0 else pd.DataFrame()
+                            ])
+                    else:
+                        # Fallback to all products if no favorites match
+                        st.write(f"🔍 Debug: No products matched, using fallback!")
+                        sample_products = items_df.sample(num_recs, random_state=42)
+                else:
+                    # No preferences yet, show random recommendations
+                    # Prioritize products with images
+                    has_images = items_df['valid_image_urls'].apply(
+                        lambda x: len(x) > 0 if hasattr(x, '__len__') else False
+                    )
+                    
+                    products_with_images = items_df[has_images]
+                    products_without_images = items_df[~has_images]
+                    
+                    # Try to get as many products with images as possible
+                    if len(products_with_images) >= num_recs:
+                        # We have enough products with images, use only them
+                        sample_products = products_with_images.sample(num_recs, random_state=42)
+                    else:
+                        # Not enough products with images, mix with some without images
+                        num_with_images = len(products_with_images)
+                        num_without_images = max(0, num_recs - num_with_images)
+                        
+                        sample_products = pd.concat([
+                            products_with_images.sample(num_with_images, random_state=42) if num_with_images > 0 else pd.DataFrame(),
+                            products_without_images.sample(num_without_images, random_state=42) if num_without_images > 0 else pd.DataFrame()
+                        ])
+                
+                # Shuffle minimally to keep image priority
+                sample_products = sample_products.sample(frac=1, random_state=42).reset_index(drop=True)
+            
+            for idx, (_, product) in enumerate(sample_products.iterrows()):
+                # Get interactions for this product to calculate rating
+                product_id = product.get('asin', product.get('item_id', ''))
+                product_interactions = interactions_df[interactions_df['asin'] == product_id] if not interactions_df.empty else pd.DataFrame()
+                
+                # Calculate rating from interactions
+                if not product_interactions.empty:
+                    avg_rating = product_interactions['overall'].mean() if 'overall' in product_interactions.columns else 4.0
+                    review_count = len(product_interactions)
+                else:
+                    avg_rating = 4.0  # Default rating
+                    review_count = 0
+                
+                # Get product title and details
+                title = product['title']
+                price = product.get('price', 0.0)
+                if price == 0.0:
+                    price = np.random.uniform(10, 100)  # Random price if missing
+                
+                item = {
+                    "item_id": product_id,
+                    "title": str(title),
+                    "category": product['category'],
+                    "brand": product.get('brand', 'Unknown Brand'),
+                    "price": price,
+                    "rating": avg_rating,
+                    "review_count": review_count,
+                    "score": np.random.uniform(0.7, 0.95),  # This would come from ML model
+                    "explanation": f"Recommended based on your interests in {product['category']}",
+                    "valid_image_urls": product.get('valid_image_urls', [])
+                }
+                recommendations.append(item)
+            
+            # Cache the recommendations
+            st.session_state.cached_recommendations = recommendations
+            st.session_state.rec_params = num_recs
+        else:
+            # Use cached recommendations
+            recommendations = st.session_state.cached_recommendations
+        
+        # Display recommendations
+        for idx, item in enumerate(recommendations):
+            with st.container():
+                col1, col2, col3 = st.columns([1, 3, 1])
+                
+                with col1:
+                    # Try to display real image if available
+                    image_urls = item.get('valid_image_urls', [])
+                    show_image = False
+                    has_valid_images = False
+                    
+                    # Convert numpy array to list if needed
+                    if hasattr(image_urls, 'tolist'):
+                        image_urls = image_urls.tolist()
+                    
+                    # Check if image_urls is a valid list with actual URLs
+                    if (isinstance(image_urls, (list, tuple)) and 
+                        len(image_urls) > 0 and 
+                        image_urls[0] and 
+                        isinstance(image_urls[0], str) and 
+                        image_urls[0].startswith(('http://', 'https://'))):
+                        
+                        has_valid_images = True
+                        try:
+                            # Try to display the image
+                            st.image(image_urls[0], width=100, caption="Product Image", use_column_width=False)
+                            show_image = True
+                        except Exception as e:
+                            # If image fails to load, fallback to icon
+                            show_image = False
+                    
+                    if not show_image:
+                        # Fallback to category icon
+                        category_icons = {
+                            "Video_Games": "🎮",
+                            "Digital_Music": "🎵", 
+                            "Software": "💻",
+                            "Electronics": "📱",
+                            "Clothing": "👕", 
+                            "Books": "📚",
+                            "Home": "🏠",
+                            "Garden": "🌱",
+                            "Sports": "⚽",
+                            "Beauty": "💄",
+                            "Appliances": "🔌",
+                            "Gift_Cards": "🎁",
+                            "Industrial": "🏭",
+                            "Magazine": "📰",
+                            "Pantry": "🥫"
+                        }
+                        
+                        icon = category_icons.get(item.get('category', 'Unknown'), '📦')
+                        st.markdown(f"<div style='font-size: 4rem; text-align: center; padding: 20px;'>{icon}</div>", 
+                                   unsafe_allow_html=True)
+                
+                with col2:
+                    st.markdown(f"### {item['title']}")
+                    
+                    # Rating
+                    stars = "⭐" * int(item['rating'])
+                    st.markdown(f"{stars} {item['rating']:.1f}/5.0 ({item['review_count']} reviews)")
+                    
+                    # Price and details
+                    st.markdown(f"**Price:** ${item['price']:.2f}")
+                    st.markdown(f"**Category:** {item['category']}")
+                    st.markdown(f"**Brand:** {item['brand']}")
+                    
+                    # Explanation
+                    if include_explanations:
+                        st.markdown(f"<p style='font-style: italic; color: #666; font-size: 0.9rem;'>{item['explanation']}</p>", 
+                                   unsafe_allow_html=True)
+                
+                with col3:
+                    # Image indicator
+                    if has_valid_images:
+                        st.markdown("🖼️ **Image**")
+                    else:
+                        st.markdown("📦 **No Image**")
+                    
+                    # Score
+                    st.markdown(f"<span class='score-badge'>Score: {item['score']:.3f}</span>", 
+                               unsafe_allow_html=True)
+                    
+                    # Action buttons
+                    if st.button("Add to Cart", key=f"cart_{item['item_id']}"):
+                        st.success(f"Added {item['title']} to cart!")
+                    
+                    # Use unique key with index to avoid duplicates
+                    button_idx = f"save_rec_{idx}_{item.get('asin', 'unknown')}"
+                    if st.button("Save to Wishlist", key=button_idx):
+                        product_id = item.get('asin', '')
+                        
+                        # Use multiple identifiers for better duplicate detection
+                        item_title = item.get('title', '')
+                        item_price = item.get('price', 0)
+                        
+                        # Check if already in wishlist using multiple criteria
+                        is_duplicate = False
+                        for w in st.session_state.wishlist:
+                            w_asin = w.get('asin', '')
+                            w_title = w.get('title', '')
+                            w_price = w.get('price', 0)
+                            
+                            # Check by ASIN (if both have valid ASINs)
+                            if product_id and w_asin and product_id == w_asin:
+                                is_duplicate = True
+                                break
+                            # Check by title and price (if ASINs are empty)
+                            elif not product_id and not w_asin and item_title == w_title and abs(item_price - w_price) < 0.01:
+                                is_duplicate = True
+                                break
+                        
+                        if not is_duplicate:
+                            st.session_state.wishlist.append(item)
+                            st.success(f"Added to wishlist!")
+                            st.session_state.rec_button_counter += 1
+                        else:
+                            st.info("Already in wishlist!")
+        
+            
+    with tab2:
+        st.subheader("🔍 Search for Items")
+        
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            search_query = st.text_input("Search for products...", placeholder="Enter product name or category")
+        
+        with col2:
+            st.write("")
+            st.write("")
+            search_button = st.button("🔍 Search")
+        
+        # Advanced search filters
+        with st.expander("Advanced Filters"):
+            filter_col1, filter_col2 = st.columns(2)
+            
+            # Get available categories from data
+            if st.session_state.items_data is not None and not st.session_state.items_data.empty:
+                available_categories = sorted(st.session_state.items_data['category'].unique().tolist())
+                category_options = ["All"] + available_categories
+            else:
+                category_options = ["All", "Video_Games", "Digital_Music", "Software"]
+            
+            # Get available brands from data
+            if st.session_state.items_data is not None and not st.session_state.items_data.empty:
+                available_brands = sorted(st.session_state.items_data['brand'].unique().tolist())
+                brand_options = ["All"] + available_brands[:20]  # Limit to first 20 brands
+            else:
+                brand_options = ["All", "Apple", "Samsung", "Nike", "Adidas", "Sony", "LG"]
+            
+            with filter_col1:
+                category_filter = st.selectbox(
+                    "Category",
+                    category_options
+                )
+                min_price = st.number_input("Min Price", min_value=0, value=0, step=10)
+            
+            with filter_col2:
+                brand_filter = st.selectbox(
+                    "Brand",
+                    brand_options
+                )
+                max_price = st.number_input("Max Price", min_value=0, value=1000, step=10)
+        
+        if search_button or search_query:
+            st.info(f"Searching for '{search_query}'...")
+            
+            # Make sure we have the data loaded
+            if st.session_state.items_data is None:
+                items_df, interactions_df = load_real_amazon_data()
+                st.session_state.items_data = items_df
+                st.session_state.interactions_df = interactions_df
+            
+            items_df = st.session_state.items_data
+            
+            if items_df.empty:
+                st.error("No data available for search")
+                return
+            
+            # Search in real Amazon data
+            # Convert search query to lowercase for case-insensitive search
+            search_query_lower = search_query.lower()
+            
+            # Search in title, description, brand, and category
+            # Handle NaN values by filling with empty strings
+            title_search = items_df['title'].fillna('').str.lower().str.contains(search_query_lower, na=False)
+            desc_search = items_df['description'].fillna('').str.lower().str.contains(search_query_lower, na=False)
+            brand_search = items_df['brand'].fillna('').str.lower().str.contains(search_query_lower, na=False)
+            category_search = items_df['category'].fillna('').str.lower().str.contains(search_query_lower, na=False)
+            
+            mask = title_search | desc_search | brand_search | category_search
+            
+            search_results = items_df[mask]
+            
+                        
+            # Apply filters if specified
+            if category_filter != "All":
+                search_results = search_results[search_results['category'] == category_filter]
+            
+            if brand_filter != "All":
+                search_results = search_results[search_results['brand'] == brand_filter]
+            
+            if min_price > 0:
+                search_results = search_results[search_results['price'] >= min_price]
+            
+            if max_price > 0:
+                search_results = search_results[search_results['price'] <= max_price]
+            
+            # Display results
+            if not search_results.empty:
+                st.success(f"Found {len(search_results)} matching products")
+                
+                # Shuffle results and limit to first 20 for diverse display
+                display_results = search_results.sample(frac=1).head(20)
+                
+                for idx, (_, product) in enumerate(display_results.iterrows()):
+                    with st.container():
+                        col1, col2 = st.columns([1, 3])
+                        
+                        with col1:
+                            # Try to display image
+                            image_urls = product.get('valid_image_urls', [])
+                            show_image = False
+                            
+                            # Convert numpy array to list if needed
+                            if hasattr(image_urls, 'tolist'):
+                                image_urls = image_urls.tolist()
+                            
+                            # Check if image_urls is a valid list with actual URLs
+                            if (isinstance(image_urls, (list, tuple)) and 
+                                len(image_urls) > 0 and 
+                                image_urls[0] and 
+                                isinstance(image_urls[0], str) and 
+                                image_urls[0].startswith(('http://', 'https://'))):
+                                
+                                try:
+                                    # Try to display the image
+                                    st.image(image_urls[0], width=80, caption="Product Image")
+                                    show_image = True
+                                except Exception as e:
+                                    # If image fails to load, fallback to icon
+                                    show_image = False
+                            
+                            if not show_image:
+                                # Fallback to category icon
+                                category_icons = {
+                                    "Video_Games": "🎮",
+                                    "Digital_Music": "🎵", 
+                                    "Software": "💻",
+                                    "Electronics": "📱",
+                                    "Clothing": "👕", 
+                                    "Books": "📚",
+                                    "Home": "🏠",
+                                    "Garden": "🌱",
+                                    "Sports": "⚽",
+                                    "Beauty": "💄",
+                                    "Appliances": "🔌",
+                                    "Gift_Cards": "🎁",
+                                    "Industrial": "🏭",
+                                    "Magazine": "📰",
+                                    "Pantry": "🥫"
+                                }
+                                
+                                icon = category_icons.get(product.get('category', 'Unknown'), '📦')
+                                st.markdown(f"<div style='font-size: 3rem; text-align: center; padding: 10px;'>{icon}</div>", 
+                                           unsafe_allow_html=True)
+                        
+                        with col2:
+                            st.markdown(f"**{product['title'][:100]}{'...' if len(product['title']) > 100 else ''}**")
+                            st.markdown(f"**Category:** {product['category']}")
+                            st.markdown(f"**Brand:** {product.get('brand', 'Unknown')}")
+                            st.markdown(f"**Price:** ${product.get('price', 0.0):.2f}")
+                            
+                            # Get rating for this product
+                            product_id = product.get('asin', product.get('item_id', ''))
+                            product_interactions = st.session_state.interactions_df[
+                                st.session_state.interactions_df['asin'] == product_id
+                            ] if not st.session_state.interactions_df.empty else pd.DataFrame()
+                            
+                            if not product_interactions.empty:
+                                avg_rating = product_interactions['overall'].mean() if 'overall' in product_interactions.columns else 4.0
+                                review_count = len(product_interactions)
+                                stars = "S" * int(avg_rating)
+                                st.markdown(f"{stars} {avg_rating:.1f}/5.0 ({review_count} reviews)")
+                            
+                            st.markdown("---")
+                            
+                            # Add to wishlist button for search results
+                            # Use unique key with index to avoid duplicates
+                            button_idx = f"save_search_{idx}_{item.get('asin', 'unknown')}"
+                            
+                            if st.button("Save to Wishlist", key=button_idx):
+                                # Increment counter only when button is clicked
+                                st.session_state.search_button_counter += 1
+                                # Add to wishlist
+                                product_id = item.get('asin', '')
+                                item_title = item.get('title', '')
+                                item_price = item.get('price', 0)
+                                
+                                # Check if already in wishlist using multiple criteria
+                                is_duplicate = False
+                                for w in st.session_state.wishlist:
+                                    w_asin = w.get('asin', '')
+                                    w_title = w.get('title', '')
+                                    w_price = w.get('price', 0)
+                                    
+                                    # Check by ASIN (if both have valid ASINs)
+                                    if product_id and w_asin and product_id == w_asin:
+                                        is_duplicate = True
+                                        break
+                                    # Check by title and price (if ASINs are empty)
+                                    elif not product_id and not w_asin and item_title == w_title and abs(item_price - w_price) < 0.01:
+                                        is_duplicate = True
+                                        break
+                                
+                                if not is_duplicate:
+                                    st.session_state.wishlist.append(item)
+                                    st.success(f"Added {item['title'][:30]}... to wishlist! ❤️")
+                                else:
+                                    st.info("This item is already in your wishlist!")
+            else:
+                st.warning(f"No products found matching '{search_query}'")
+                st.info("Try different keywords or check your spelling")
+    
+    with tab3:
+        st.subheader("📊 Your Shopping Activity")
+        
+        # Activity metrics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Total Purchases", "42")
+        with col2:
+            st.metric("Items Viewed", "156")
+        with col3:
+            st.metric("Avg Order Value", "$127.50")
+        with col4:
+            st.metric("Saved Items", "8")
+        
+        # Recent activity chart
+        st.subheader("📈 Recent Activity")
+        
+        # Sample data
+        dates = pd.date_range(end=datetime.now(), periods=30, freq='D')
+        activity = np.random.randint(0, 10, size=30)
+        
+        activity_df = pd.DataFrame({
+            'date': dates,
+            'activity': activity
+        })
+        
+        fig = px.line(activity_df, x='date', y='activity', 
+                     title='Your Shopping Activity (Last 30 Days)')
+        fig.update_layout(showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Category preferences
+        st.subheader("🎯 Your Category Preferences")
+        
+        category_data = {
+            'Category': ['Electronics', 'Clothing', 'Books', 'Home & Garden'],
+            'Preference': [35, 25, 20, 20]
+        }
+        
+        category_df = pd.DataFrame(category_data)
+        
+        fig = px.pie(category_df, values='Preference', names='Category',
+                    title='Your Shopping Preferences by Category')
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with tab4:
+        st.subheader("❤️ Your Wishlist")
+        
+        if not st.session_state.wishlist:
+            st.info("Your wishlist is empty. Start adding products you love!")
+        else:
+            # Display wishlist items
+            for idx, item in enumerate(st.session_state.wishlist):
+                with st.container():
+                    col1, col2, col3 = st.columns([1, 3, 1])
+                    
+                    with col1:
+                        # Try to display image
+                        image_urls = item.get('valid_image_urls', [])
+                        show_image = False
+                        
+                        # Convert numpy array to list if needed
+                        if hasattr(image_urls, 'tolist'):
+                            image_urls = image_urls.tolist()
+                        
+                        # Check if image_urls is a valid list with actual URLs
+                        if (isinstance(image_urls, (list, tuple)) and 
+                            len(image_urls) > 0 and 
+                            image_urls[0] and 
+                            isinstance(image_urls[0], str) and 
+                            image_urls[0].startswith(('http://', 'https://'))):
+                            
+                            try:
+                                # Try to display the image
+                                st.image(image_urls[0], width=80, caption="Product Image")
+                                show_image = True
+                            except Exception as e:
+                                # If image fails to load, fallback to icon
+                                show_image = False
+                        
+                        if not show_image:
+                            # Fallback to category icon
+                            category_icons = {
+                                "Video_Games": "🎮",
+                                "Digital_Music": "🎵", 
+                                "Software": "💻",
+                                "Electronics": "📱",
+                                "Clothing": "👕", 
+                                "Books": "📚",
+                                "Home": "🏠",
+                                "Garden": "🌱",
+                                "Sports": "⚽",
+                                "Beauty": "💄",
+                                "Appliances": "🔌",
+                                "Gift_Cards": "🎁",
+                                "Industrial": "🏭",
+                                "Magazine": "📰",
+                                "Pantry": "🥫"
+                            }
+                            
+                            icon = category_icons.get(item.get('category', 'Unknown'), '📦')
+                            st.markdown(f"<div style='font-size: 3rem; text-align: center; padding: 10px;'>{icon}</div>", 
+                                       unsafe_allow_html=True)
+                    
+                    with col2:
+                        st.markdown(f"**{item['title'][:80]}{'...' if len(item['title']) > 80 else ''}**")
+                        st.markdown(f"**Category:** {item['category']}")
+                        st.markdown(f"**Brand:** {item.get('brand', 'Unknown')}")
+                        st.markdown(f"**Price:** ${item.get('price', 0.0):.2f}")
+                        
+                        # Get rating for this product
+                        product_id = item.get('asin', item.get('item_id', ''))
+                        if st.session_state.interactions_df is not None and not st.session_state.interactions_df.empty:
+                            product_interactions = st.session_state.interactions_df[
+                                st.session_state.interactions_df['asin'] == product_id
+                            ]
+                            
+                            if not product_interactions.empty:
+                                avg_rating = product_interactions['overall'].mean() if 'overall' in product_interactions.columns else 4.0
+                                review_count = len(product_interactions)
+                                stars = "⭐" * int(avg_rating)
+                                st.markdown(f"{stars} {avg_rating:.1f}/5.0 ({review_count} reviews)")
+                    
+                    with col3:
+                        # Remove from wishlist button
+                        if st.button("🗑️ Remove", key=f"remove_{item['item_id']}"):
+                            st.session_state.wishlist = [w for w in st.session_state.wishlist if w['item_id'] != item['item_id']]
+                            st.success(f"Removed {item['title'][:30]}... from wishlist!")
+                            st.rerun()
+                    
+                    st.markdown("---")
+            
+            # Wishlist summary
+            st.subheader("📊 Wishlist Summary")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                total_items = len(st.session_state.wishlist)
+                st.metric("Total Items", total_items)
+            
+            with col2:
+                if st.session_state.wishlist:
+                    total_value = sum(item.get('price', 0) for item in st.session_state.wishlist)
+                    st.metric("Total Value", f"${total_value:.2f}")
+                else:
+                    st.metric("Total Value", "$0.00")
+            
+            with col3:
+                if st.session_state.wishlist:
+                    categories = [item.get('category', 'Unknown') for item in st.session_state.wishlist]
+                    unique_categories = len(set(categories))
+                    st.metric("Categories", unique_categories)
+                else:
+                    st.metric("Categories", 0)
+            
+            # Clear wishlist button
+            if st.button("🗑️ Clear Wishlist", type="secondary"):
+                st.session_state.wishlist = []
+                st.success("Wishlist cleared!")
+
+def main():
+    """Main application router"""
+    # Route based on authentication
+    if not st.session_state.is_authenticated:
+        login_page()
+    else:
+        main_dashboard()
+
+if __name__ == "__main__":
+    main()
